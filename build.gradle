@@ -1,0 +1,108 @@
+buildscript {
+    ext {
+        versionElasticsearch = "5.4.3"
+    }
+    repositories {
+        maven { url 'http://repox.gtan.com:8078' }
+        mavenCentral()
+        jcenter()
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url 'http://repox.gtan.com:8078' }
+        mavenCentral()
+        jcenter()
+    }
+
+    // no unit tests
+}
+
+def ccCommonBuildScript = file("$rootDir/gradle/common.gradle")
+def ccLibs = fileTree(dir: "$rootDir/lib", include: '*.jar', excludes: ["*-sources.jar", "*-src.jar"])
+
+project(':common') {
+    apply from: ccCommonBuildScript
+
+    description = 'common'
+
+    dependencies {
+        compile ccLibs
+        compile("org.elasticsearch:elasticsearch:$versionElasticsearch")
+        compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.5'
+    }
+}
+
+project(':hanlp-io') {
+    apply from: ccCommonBuildScript
+
+    description = 'hanlp-io'
+
+    dependencies {
+        compile project(':common')
+
+        compile("org.apache.hadoop:hadoop-client:2.7.3")
+    }
+}
+
+project(':es-plugin') {
+    apply from: ccCommonBuildScript
+
+    description = 'es-plugin'
+
+    version = versionElasticsearch
+
+    configurations {
+        includeJars
+//        compile.exclude group: 'org.elasticsearch', module: 'elasticsearch'
+//        compile.exclude group: 'org.apache.lucene'
+    }
+
+    dependencies {
+        compile project(':common')
+
+//        compile("com.hankcs.nlp:hanlp-lucene-plugin:1.1.2") {
+//            exclude group: "com.hankcs", module: "hanlp"
+//            exclude group: "org.apache.lucene"
+//        }
+        testCompile("org.elasticsearch.test:framework:$versionElasticsearch")
+
+        includeJars(ccLibs)
+//        includeJars("com.hankcs.nlp:hanlp-lucene-plugin:1.1.2") {
+//            exclude group: "com.hankcs", module: "hanlp"
+//            exclude group: "org.apache.lucene"
+//        }
+        includeJars(project(':common'))
+    }
+
+    test.enabled = false
+
+    task buildPluginZip(type: Zip) {
+        baseName = 'hanlp-ext-crf'
+        from files(libsDir)
+        from 'src/main/universal'
+        from configurations.includeJars
+                .filter { file ->
+                    String path = file.toString()
+                    !(path.contains("org.apache.lucene")
+                            || path.contains("org.elasticsearch")
+                            || path.contains("com.fasterxml.jackson")
+                            || path.contains("net.sf.jopt-simple")
+                            || path.contains("com.carrotsearch")
+                            || path.contains("joda-time")
+                            || path.contains("org.yaml")
+                            || path.contains("com.tdunning")
+                            || path.contains("org.hdrhistogram")
+                    )
+                }
+                .collect { it }
+//        from configurations.includeJars.collect { it }
+        into 'elasticsearch'
+    }
+
+    artifacts {
+        archives buildPluginZip
+    }
+}
+
